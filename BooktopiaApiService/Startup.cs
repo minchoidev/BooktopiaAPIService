@@ -41,9 +41,8 @@ namespace BooktopiaApiService
             {
                 options.SwaggerDoc("v1", new Info
                 {
-                    Title = "Booktopia Order Service API",
-                    Version = "v1",
-                    Description = "Book order service using Async "
+                    Title = "Booktopia Book API Service",
+                    Version = "v1"
                 });
             });
         }
@@ -66,7 +65,7 @@ namespace BooktopiaApiService
             app.UseSwagger();
 
             app.UseSwaggerUI(options =>
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "Booktopia Order Service API"));
+                options.SwaggerEndpoint("/swagger/v1/swagger.json", "Booktopia Book API Service"));
 
         }
     }
