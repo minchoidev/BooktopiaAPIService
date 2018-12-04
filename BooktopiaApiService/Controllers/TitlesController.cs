@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BooktopiaApiService.Models;
 using System.Globalization;
+using System.Diagnostics;
+using System.Transactions;
 
 namespace BooktopiaApiService.Controllers
 {
@@ -327,7 +329,7 @@ namespace BooktopiaApiService.Controllers
                 }
             }
 
-            return NoContent();
+            return Ok(title);
         }
 
         // POST: api/Titles
@@ -360,10 +362,52 @@ namespace BooktopiaApiService.Controllers
                 return NotFound();
             }
 
-            _context.Title.Remove(title);
-            await _context.SaveChangesAsync();
+            bool isSucceded = false;
 
-            return Ok(title);
+            // transaction
+            // ref: https://docs.microsoft.com/en-us/ef/ef6/saving/transactions
+            using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            {
+                // find OrderDetails and delete them
+                var orderDetails = await _context.OrderDetail.Where(o => o.TitleId == id).ToListAsync();
+                foreach (OrderDetail o in orderDetails)
+                {
+                    _context.OrderDetail.Remove(o);
+                    await _context.SaveChangesAsync();
+
+                    var relatedOrderDetails = await _context.OrderDetail.Where(t => t.OrderId == o.OrderId).ToListAsync();
+                    // when no order detail that doesn't have the same order exists, delete the order
+                    if (relatedOrderDetails.Count == 0) {
+                        // find related Order and delete it when it doesn't have any OrderDetail
+                        var relatedOrder = _context.Order.FindAsync(o.OrderId);
+                        if (relatedOrder.Result != null)
+                        {
+                            Order order = relatedOrder.Result;
+                            _context.Order.Remove(order);
+                            await _context.SaveChangesAsync();
+
+                            // Mistake Note:
+                            // if (order.OrderDetail.Count == 0)
+                            // even it shows count as 0, it might have some jointable records.
+                            // because when it finds a record in the db, it only take the values belong to it,
+                            // not the relationship data.
+                        }
+                    }
+                }
+
+                _context.Title.Remove(title);
+
+                await _context.SaveChangesAsync();
+
+                // commit
+                transaction.Complete();
+                isSucceded = true;
+            }
+
+            if (isSucceded)
+                return Ok(title);
+            else
+                return Conflict(title);
         }
 
         private bool TitleExists(int id)
